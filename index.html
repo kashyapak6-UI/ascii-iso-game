@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050810">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ISO REEF</title>
+<style>
+  :root { --bg:#050810; --fog:#0a1626; --teal:#47c7bd; --teal-dim:rgba(71,199,189,.35); --orange:#ff801a; --ink:#d1e6ff; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"DejaVu Sans Mono","Cascadia Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+    overflow:hidden; user-select:none; -webkit-user-select:none; touch-action:none; }
+  #app { width:100%; height:100%; height:100dvh; max-width:480px; margin:0 auto;
+    display:flex; flex-direction:column; background:radial-gradient(ellipse at 50% 30%, #0a1a2c 0%, #050810 70%);
+    position:relative; }
+  #hud { flex:0 0 auto; display:flex; align-items:baseline; justify-content:space-between;
+    padding:calc(8px + env(safe-area-inset-top,0px)) 14px 6px; gap:8px; letter-spacing:.08em;
+    font-size:11px; color:#7aa0a8; }
+  #hud .brand { color:var(--teal); font-weight:700; letter-spacing:.22em; font-size:12px; }
+  #hud .stat { white-space:nowrap; }
+  #hud .stat b { color:#ffb847; font-weight:700; }
+  #hud .lives { color:var(--orange); letter-spacing:.16em; }
+  #stage { flex:1 1 auto; position:relative; min-height:0; }
+  #view { display:block; width:100%; height:100%; }
+  #overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(5,8,16,.55); z-index:5; padding:20px; }
+  #overlay.hidden { display:none; }
+  #panel { text-align:center; max-width:92%; background:rgba(5,8,16,.9);
+    border:1px solid rgba(71,199,189,.28); border-radius:10px; padding:18px 16px 20px;
+    box-shadow:0 12px 40px rgba(0,0,0,.45); }
+  #logo { color:var(--teal); font-size:12px; line-height:1.2; white-space:pre; margin-bottom:8px;
+    text-shadow:0 0 18px rgba(71,199,189,.35); overflow:hidden; }
+  #msg { color:#c8d8e0; font-size:12px; line-height:1.55; margin:8px 0 16px; white-space:pre-wrap; }
+  #msg strong { color:#ffb847; }
+  #action { appearance:none; border:1px solid var(--teal-dim); background:rgba(10,22,38,.9);
+    color:var(--teal); font:700 13px/1 inherit; letter-spacing:.18em; padding:14px 22px;
+    border-radius:4px; cursor:pointer; min-width:200px; min-height:48px; }
+  #action:active { background:rgba(71,199,189,.15); color:#ffb847; border-color:#ff801a; }
+  #controls { flex:0 0 auto; display:flex; flex-direction:column; align-items:center;
+    padding:4px 0 calc(12px + env(safe-area-inset-bottom,0px)); gap:6px; }
+  #hint { font-size:10px; color:#3d5a66; letter-spacing:.16em; }
+  #pad { display:grid; grid-template-columns:64px 64px 64px; grid-template-rows:64px 64px 64px; gap:8px; }
+  #pad button { appearance:none; border:1px solid var(--teal-dim); background:rgba(10,22,38,.92);
+    color:var(--teal); font:700 18px/1 inherit; border-radius:10px; cursor:pointer; }
+  #pad button:active, #pad button.held { background:rgba(71,199,189,.18); color:#ffb847; border-color:#ff801a; }
+  #pad .ghost { visibility:hidden; pointer-events:none; border:none; background:none; }
+  @media (max-height:740px) {
+    #pad { grid-template-columns:56px 56px 56px; grid-template-rows:56px 56px 56px; gap:6px; }
+    #logo { font-size:11px; }
+  }
+  @media (min-width:900px) {
+    body { background:#03050a; }
+    #app { box-shadow:0 0 0 1px #12202c, 0 20px 80px rgba(0,0,0,.55); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="brand">ISO REEF</div>
+    <div class="stat">LV <b id="lv">1</b></div>
+    <div class="stat">SCR <b id="scr">0</b></div>
+    <div class="stat">FOOD <b id="fd">0/0</b></div>
+    <div class="lives" id="hp">&lt;&gt; &lt;&gt; &lt;&gt;</div>
+  </header>
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <div id="overlay">
+      <div id="panel">
+        <pre id="logo"></pre>
+        <p id="msg"></p>
+        <button id="action" type="button">TAP TO SWIM</button>
+      </div>
+    </div>
+  </div>
+  <div id="controls">
+    <div id="hint">WASD  ·  ARROWS</div>
+    <div id="pad">
+      <button class="ghost" tabindex="-1" aria-hidden="true"></button>
+      <button type="button" data-dir="up" aria-label="up">^</button>
+      <button class="ghost" tabindex="-1" aria-hidden="true"></button>
+      <button type="button" data-dir="left" aria-label="left">&lt;</button>
+      <button class="ghost" tabindex="-1" aria-hidden="true"></button>
+      <button type="button" data-dir="right" aria-label="right">&gt;</button>
+      <button class="ghost" tabindex="-1" aria-hidden="true"></button>
+      <button type="button" data-dir="down" aria-label="down">v</button>
+      <button class="ghost" tabindex="-1" aria-hidden="true"></button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+
+  const TW = 6, TH = 4, ZH = 3;
+  const BG  = [5, 8, 16];
+  const FOG = [10, 22, 38];
+  const ORANGE = [255, 128, 26];
+  const ORANGE_DEEP = [219, 61, 15];
+  const ORANGE_HI = [255, 184, 71];
+  const WHITE = [250, 247, 239];
+  const INK = [20, 12, 28];
+  const RIM = [209, 230, 255];
+  const TEAL = [71, 199, 189];
+  const TEAL_DEEP = [31, 102, 112];
+  const TEAL_TIP = [158, 242, 224];
+  const PURPLE = [140, 102, 184];
+  const STEM = [107, 71, 56];
+  const SAND = [156, 142, 108];
+  const SAND_DK = [92, 74, 50];
+  const SAND_DP = [48, 36, 24];
+  const WATER = [22, 64, 84];
+  const WATER_HI = [48, 122, 138];
+  const WATER_DP = [10, 28, 44];
+  const CORAL = [224, 112, 112];
+  const CORAL_HI = [240, 176, 160];
+  const CORAL_DK = [138, 48, 64];
+  const ROCK = [90, 106, 120];
+  const ROCK_HI = [168, 184, 198];
+  const ROCK_DK = [42, 56, 68];
+  const FOOD_C = [255, 214, 96];
+  const SHARK_C = [150, 166, 180];
+  const SHARK_DK = [70, 84, 96];
+  const JELLY_C = [198, 118, 214];
+  const JELLY_HI = [232, 190, 240];
+  const DANGER = [255, 68, 102];
+  const RAMP = "@#8B%&$0QOGcwvu*+=~-:;,. ";
+
+  const canvas = document.getElementById("view");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const overlay = document.getElementById("overlay");
+  const logoEl = document.getElementById("logo");
+  const msgEl = document.getElementById("msg");
+  const actionEl = document.getElementById("action");
+  const lvEl = document.getElementById("lv");
+  const scrEl = document.getElementById("scr");
+  const fdEl = document.getElementById("fd");
+  const hpEl = document.getElementById("hp");
+
+  logoEl.textContent = [
+    "  .----------------------.",
+    "  |   I S O   R E E F    |",
+    "  '----------------------'",
+    "     ascii  isometric"
+  ].join("\n");
+
+  let cols = 60, rows = 40, cellW = 8, cellH = 14, dpr = 1;
+  let grid = [];
+  let state = "title";
+  let level = 1, score = 0, lives = 3;
+  let world = null;
+  let player = null;
+  let input = { up:false, down:false, left:false, right:false, queue:null };
+  let particles = [];
+  let drift = [];
+  let time = 0, lastTs = 0;
+  let invuln = 0;
+  let flash = 0;
+  let banner = { text:"", life:0 };
+  let startTime = 0;
+  let audioCtx = null;
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function lerp3(a, b, t) { return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
+  function hash(x, y) {
+    let n = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
+    n = (n ^ (n >>> 13)) * 1274126177;
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function css(rgb, light, fogAmt) {
+    let r = rgb[0] * light, g = rgb[1] * light, b = rgb[2] * light;
+    if (fogAmt) { r += (FOG[0] - r) * fogAmt; g += (FOG[1] - g) * fogAmt; b += (FOG[2] - b) * fogAmt; }
+    r = clamp(r, 0, 255) | 0; g = clamp(g, 0, 255) | 0; b = clamp(b, 0, 255) | 0;
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+  function rampCh(t) { return RAMP[clamp((t * (RAMP.length - 1)) | 0, 0, RAMP.length - 1)]; }
+
+  function iso(x, y, z) {
+    return { c: (x - y) * (TW / 2), r: (x + y) * (TH / 2) - z * ZH };
+  }
+
+  function ensureAudio() {
+    if (audioCtx) return audioCtx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+    return audioCtx;
+  }
+  function beep(freq, dur, type, vol, slide) {
+    const ac = audioCtx;
+    if (!ac) return;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = type || "square";
+    o.frequency.setValueAtTime(freq, ac.currentTime);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, slide), ac.currentTime + dur);
+    g.gain.setValueAtTime(vol || 0.04, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(); o.stop(ac.currentTime + dur + 0.02);
+  }
+  function sfx(kind) {
+    if (!audioCtx) return;
+    if (kind === "collect") { beep(880, 0.09, "square", 0.035, 1320); }
+    else if (kind === "hit") { beep(180, 0.22, "sawtooth", 0.05, 70); }
+    else if (kind === "win") { beep(523, 0.12, "square", 0.04); setTimeout(() => beep(659, 0.12, "square", 0.04), 110); setTimeout(() => beep(784, 0.22, "square", 0.05), 220); }
+    else if (kind === "go") { beep(196, 0.35, "sawtooth", 0.05, 80); }
+    else if (kind === "start") { beep(392, 0.1, "square", 0.03, 523); }
+  }
+
+  function resize() {
+    const stage = document.getElementById("stage");
+    const w = Math.max(1, stage.clientWidth);
+    const h = Math.max(1, stage.clientHeight);
+    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    fitGrid(w, h);
+  }
+
+  function measureFont(px) {
+    const test = document.createElement("canvas").getContext("2d");
+    test.font = px + 'px "DejaVu Sans Mono","Cascadia Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono","Courier New",monospace';
+    const m = test.measureText("M");
+    const cw = m.width;
+    const ch = (m.actualBoundingBoxAscent && m.actualBoundingBoxDescent)
+      ? (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) * 1.18
+      : px * 1.7;
+    return { cw, ch, px };
+  }
+
+  function worldBounds(W) {
+    let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+    const pad = 2;
+    for (let y = -pad; y < W.h + pad; y++) {
+      for (let x = -pad; x < W.w + pad; x++) {
+        const t = tileAt(W, x, y);
+        const z = t ? t.h : 0;
+        const p = iso(x, y, z);
+        const p2 = iso(x, y, 0);
+        minC = Math.min(minC, p.c - TW / 2, p2.c - TW / 2);
+        maxC = Math.max(maxC, p.c + TW / 2, p2.c + TW / 2);
+        minR = Math.min(minR, p.r - 6, p2.r);
+        maxR = Math.max(maxR, p2.r + TH + ZH * Math.max(1, z) + 2);
+      }
+    }
+    return { minC, maxC, minR, maxR };
+  }
+
+  function fitGrid(cssW, cssH) {
+    const W = world || demoWorld();
+    const b = worldBounds(W);
+    const needW = (b.maxC - b.minC) + 4;
+    const needH = (b.maxR - b.minR) + 6;
+    let lo = 8, hi = 22, best = measureFont(12);
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      const m = measureFont(mid);
+      if (needW * m.cw <= cssW && needH * m.ch <= cssH) { best = m; lo = mid; }
+      else hi = mid;
+    }
+    if (needW * best.cw > cssW || needH * best.ch > cssH) {
+      best = measureFont(Math.max(8, best.px * 0.92));
+    }
+    cellW = best.cw;
+    cellH = best.ch;
+    cols = Math.max(20, Math.ceil(cssW / cellW) + 2);
+    rows = Math.max(16, Math.ceil(cssH / cellH) + 2);
+    W._bbox = b;
+    W._originC = (b.minC + b.maxC) / 2;
+    W._originR = (b.minR + b.maxR) / 2 - 0.5;
+  }
+
+  function tileAt(W, x, y) {
+    if (!W || x < 0 || y < 0 || x >= W.w || y >= W.h) return null;
+    return W.tiles[y * W.w + x];
+  }
+
+  function walkable(W, x, y, fromH) {
+    const t = tileAt(W, x, y);
+    if (!t || t.solid) return false;
+    if (fromH == null) return true;
+    return Math.abs(t.h - fromH) <= 1;
+  }
+
+  function parseMap(lines, extras) {
+    const h = lines.length, w = lines[0].length;
+    const tiles = new Array(w * h);
+    const food = [];
+    let start = { x: 1, y: h - 2 };
+    let home = { x: w - 2, y: 1 };
+    const enemies = [];
+    const weeds = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const ch = lines[y][x];
+        let type = "water", hh = 0, solid = false;
+        if (ch === "s" || ch === "p" || ch === "f" || ch === "j" || ch === "k" || ch === "w") { type = "sand"; hh = 1; }
+        else if (ch === "S") { type = "sand"; hh = 2; }
+        else if (ch === "c") { type = "coral"; hh = 2; solid = true; }
+        else if (ch === "C") { type = "coral"; hh = 3; solid = true; }
+        else if (ch === "r") { type = "rock"; hh = 2; solid = true; }
+        else if (ch === "R") { type = "rock"; hh = 3; solid = true; }
+        else if (ch === "a") { type = "anemone"; hh = 1; }
+        else if (ch === ",") { type = "water"; hh = 0; }
+        tiles[y * w + x] = { type, h: hh, solid, ch };
+        if (ch === "p") start = { x, y };
+        if (ch === "a") home = { x, y };
+        if (ch === "f") food.push({ x, y, got: false, phase: hash(x, y) * Math.PI * 2 });
+        if (ch === "j") enemies.push({ kind: "jelly", x, y, px: x, py: y, tx: x, ty: y, t: 0, wait: 0.6 + hash(x, y), dir: 0, bob: hash(x + 3, y) });
+        if (ch === "k") enemies.push({ kind: "shark", x, y, px: x, py: y, tx: x, ty: y, t: 0, wait: 0.4 + hash(x, y) * 0.3, dir: 1, bob: 0 });
+        if (ch === "w") weeds.push({ x, y });
+      }
+    }
+    if (extras && extras.food) extras.food.forEach((p) => food.push({ x: p.x, y: p.y, got: false, phase: hash(p.x, p.y) * 6.28 }));
+    return { w, h, tiles, food, start, home, enemies, weeds };
+  }
+
+  const HAND = [
+    [
+      ".......",
+      "..ssc..",
+      ".sSfssa",
+      ".cfsfSw",
+      ".sfsss.",
+      "..pssj.",
+      "......."
+    ],
+    [
+      "........",
+      "..sscs..",
+      ".sSsfssa",
+      ".cfsfSsw",
+      ".sSsfsSc",
+      ".wfspss.",
+      "..skss..",
+      "........"
+    ],
+    [
+      ".........",
+      "...ssc...",
+      "..sSsfssa",
+      ".rcsfssS.",
+      ".sSsfssc.",
+      ".wssfSss.",
+      "..jspss..",
+      "...sks...",
+      "........."
+    ]
+  ];
+
+  function generateLevel(n) {
+    if (n <= HAND.length) return parseMap(HAND[n - 1]);
+    const rng = mulberry32(0xC10F15 + n * 7919);
+    const S = Math.min(9, 6 + Math.floor((n - 1) / 2));
+    const lines = [];
+    const cx = (S - 1) / 2, cy = (S - 1) / 2;
+    for (let y = 0; y < S; y++) {
+      let row = "";
+      for (let x = 0; x < S; x++) {
+        const edge = x === 0 || y === 0 || x === S - 1 || y === S - 1;
+        const d = Math.hypot(x - cx, y - cy);
+        const maxd = S * (0.38 + rng() * 0.12);
+        let ch = ".";
+        if (!edge && d < maxd) {
+          ch = "s";
+          if (d < maxd * 0.4 && rng() < 0.45) ch = "S";
+          if (rng() < 0.09 + n * 0.008) ch = rng() < 0.55 ? "c" : "C";
+          else if (rng() < 0.07) ch = rng() < 0.6 ? "r" : "R";
+          else if (rng() < 0.08) ch = "w";
+        }
+        row += ch;
+      }
+      lines.push(row);
+    }
+    const Wtmp = parseMap(lines);
+    const walk = [];
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const t = tileAt(Wtmp, x, y);
+      if (t && !t.solid && t.type !== "water") walk.push({ x, y });
+    }
+    if (walk.length < 8) return generateLevel(Math.max(1, n - 1) === n ? 1 : Math.max(1, n - 1));
+    function pickFar(from, minD) {
+      let best = walk[0], bestD = -1;
+      for (let i = 0; i < walk.length; i++) {
+        const d = Math.abs(walk[i].x - from.x) + Math.abs(walk[i].y - from.y) + rng();
+        if (d > bestD && d >= minD) { bestD = d; best = walk[i]; }
+      }
+      return best;
+    }
+    const home = pickFar({ x: 0, y: S }, 2);
+    Wtmp.tiles[home.y * S + home.x].type = "anemone";
+    Wtmp.tiles[home.y * S + home.x].solid = false;
+    Wtmp.home = home;
+    const start = pickFar(home, 3);
+    Wtmp.start = start;
+    const used = new Set([home.x + "," + home.y, start.x + "," + start.y]);
+    const nFood = Math.min(walk.length - 4, 5 + n);
+    Wtmp.food = [];
+    for (let i = 0, guard = 0; i < nFood && guard < 200; guard++) {
+      const p = walk[(rng() * walk.length) | 0];
+      const k = p.x + "," + p.y;
+      if (used.has(k)) continue;
+      used.add(k);
+      Wtmp.food.push({ x: p.x, y: p.y, got: false, phase: rng() * 6.28 });
+      i++;
+    }
+    Wtmp.enemies = [];
+    const nJ = Math.min(3, 1 + Math.floor(n / 3));
+    const nK = Math.min(2, Math.floor((n - 1) / 2));
+    function placeEnemy(kind) {
+      for (let g = 0; g < 80; g++) {
+        const p = walk[(rng() * walk.length) | 0];
+        const k = p.x + "," + p.y;
+        if (used.has(k)) continue;
+        if (Math.abs(p.x - start.x) + Math.abs(p.y - start.y) < 3) continue;
+        used.add(k);
+        Wtmp.enemies.push({ kind, x: p.x, y: p.y, px: p.x, py: p.y, tx: p.x, ty: p.y, t: 0, wait: 0.3 + rng() * 0.5, dir: 0, bob: rng() * 6.28 });
+        return;
+      }
+    }
+    for (let i = 0; i < nJ; i++) placeEnemy("jelly");
+    for (let i = 0; i < nK; i++) placeEnemy("shark");
+    return Wtmp;
+  }
+
+  function demoWorld() { return generateLevel(1); }
+
+  function resetPlayer(W) {
+    const t = tileAt(W, W.start.x, W.start.y);
+    player = {
+      x: W.start.x, y: W.start.y,
+      px: W.start.x, py: W.start.y,
+      tx: W.start.x, ty: W.start.y,
+      t: 1, dir: "up", moving: false, h: t ? t.h : 1
+    };
+  }
+
+  function hud() {
+    lvEl.textContent = String(level);
+    scrEl.textContent = String(score);
+    const need = world ? world.food.length : 0;
+    const got = world ? world.food.filter((f) => f.got).length : 0;
+    fdEl.textContent = got + "/" + need;
+    const icon = "<>";
+    hpEl.textContent = lives > 0 ? Array.from({ length: lives }, () => icon).join(" ") : "--";
+  }
+
+  function showOverlay(msg, btn, mode) {
+    state = mode;
+    msgEl.innerHTML = msg;
+    actionEl.textContent = btn;
+    overlay.classList.remove("hidden");
+  }
+  function hideOverlay() { overlay.classList.add("hidden"); }
+
+  function startGame(resetAll) {
+    ensureAudio();
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    if (resetAll) { level = 1; score = 0; lives = 3; }
+    world = generateLevel(level);
+    resetPlayer(world);
+    particles = [];
+    invuln = 0;
+    flash = 0;
+    banner = { text: "LEVEL " + level, life: 1.6 };
+    startTime = time;
+    state = "play";
+    hideOverlay();
+    resize();
+    hud();
+    sfx("start");
+    seedDrift();
+  }
+
+  function seedDrift() {
+    drift = [];
+    const n = 28;
+    for (let i = 0; i < n; i++) {
+      drift.push({
+        x: hash(i, 3) * 14 - 2,
+        y: hash(i, 7) * 14 - 2,
+        z: 2 + hash(i, 11) * 6,
+        sp: 0.15 + hash(i, 13) * 0.35,
+        ch: "oO0."[i % 4],
+        ph: hash(i, 17) * 6.28
+      });
+    }
+  }
+
+  function remainingFood() {
+    return world.food.filter((f) => !f.got).length;
+  }
+
+  function tryMove(dx, dy) {
+    if (!player || state !== "play") return;
+    if (player.moving) { input.queue = { dx, dy }; return; }
+    const nx = player.x + dx, ny = player.y + dy;
+    if (!walkable(world, nx, ny, player.h)) return;
+    player.px = player.x; player.py = player.y;
+    player.tx = nx; player.ty = ny;
+    player.t = 0; player.moving = true;
+    if (dx === -1 && dy === -1) player.dir = "up";
+    else if (dx === 1 && dy === 1) player.dir = "down";
+    else if (dx === 1 && dy === -1) player.dir = "right";
+    else if (dx === -1 && dy === 1) player.dir = "left";
+    else if (dx + dy < 0) player.dir = dy < dx ? "right" : "up";
+    else player.dir = dy > dx ? "left" : "down";
+  }
+
+  function heldDir() {
+    // Screen-space: up = (-1,-1), right = (1,-1), down = (1,1), left = (-1,1)
+    if (input.up && !input.down) return { dx: -1, dy: -1 };
+    if (input.down && !input.up) return { dx: 1, dy: 1 };
+    if (input.left && !input.right) return { dx: -1, dy: 1 };
+    if (input.right && !input.left) return { dx: 1, dy: -1 };
+    return null;
+  }
+
+  function enemyStep(e, dt) {
+    const speed = e.kind === "shark" ? Math.max(0.28, 0.72 - level * 0.04) : Math.max(0.55, 1.05 - level * 0.04);
+    if (e.t < 1) {
+      e.t = Math.min(1, e.t + dt / speed);
+      const u = e.t * e.t * (3 - 2 * e.t);
+      e.x = lerp(e.px, e.tx, u);
+      e.y = lerp(e.py, e.ty, u);
+      if (e.t < 1) return;
+      e.x = e.tx; e.y = e.ty;
+    }
+    e.wait -= dt;
+    if (e.wait > 0) return;
+    let opts = [];
+    if (e.kind === "shark") {
+      const px = player.x, py = player.y;
+      const cand = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1],[1,1],[-1,-1]];
+      let best = [], bestD = 1e9;
+      for (const [dx, dy] of cand) {
+        const nx = Math.round(e.x) + dx, ny = Math.round(e.y) + dy;
+        if (!walkable(world, nx, ny, tileAt(world, Math.round(e.x), Math.round(e.y)).h)) continue;
+        const d = Math.abs(nx - px) + Math.abs(ny - py);
+        if (d < bestD) { bestD = d; best = [[dx, dy]]; }
+        else if (d === bestD) best.push([dx, dy]);
+      }
+      opts = best;
+    } else {
+      const cand = [[1,0],[-1,0],[0,1],[0,-1],[0,0]];
+      for (const [dx, dy] of cand) {
+        const nx = Math.round(e.x) + dx, ny = Math.round(e.y) + dy;
+        const t0 = tileAt(world, Math.round(e.x), Math.round(e.y));
+        if (dx === 0 && dy === 0) { opts.push([dx, dy]); continue; }
+        if (walkable(world, nx, ny, t0 ? t0.h : 1)) opts.push([dx, dy]);
+      }
+    }
+    if (!opts.length) { e.wait = 0.3; return; }
+    const pick = opts[(hash((e.x * 10) | 0, (time * 3 + e.bob * 10) | 0) * opts.length) | 0] || opts[0];
+    e.px = Math.round(e.x); e.py = Math.round(e.y);
+    e.tx = e.px + pick[0]; e.ty = e.py + pick[1];
+    e.t = 0;
+    e.wait = e.kind === "shark" ? 0.05 : 0.25;
+    if (pick[0] + pick[1] < 0) e.dir = pick[1] <= pick[0] ? 1 : 0;
+    else e.dir = pick[1] >= pick[0] ? 3 : 2;
+  }
+
+  function spawnBurst(x, y, z, color, n, chs) {
+    const p = iso(x, y, z);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + hash(i, (time * 100) | 0);
+      particles.push({
+        c: p.c, r: p.r - 1,
+        vc: Math.cos(a) * (2.2 + hash(i, 2)),
+        vr: Math.sin(a) * 0.8 - 2.2,
+        life: 0.45 + hash(i, 4) * 0.25,
+        age: 0,
+        ch: chs[i % chs.length],
+        color: color
+      });
+    }
+  }
+
+  function sameTile(ax, ay, bx, by) {
+    return Math.round(ax) === Math.round(bx) && Math.round(ay) === Math.round(by);
+  }
+
+  function update(dt) {
+    time += dt;
+    if (flash > 0) flash = Math.max(0, flash - dt);
+    if (invuln > 0) invuln = Math.max(0, invuln - dt);
+    if (banner.life > 0) banner.life -= dt;
+    for (const p of particles) { p.age += dt; p.c += p.vc * dt; p.r += p.vr * dt; p.vr += 6 * dt; }
+    particles = particles.filter((p) => p.age < p.life);
+    for (const d of drift) {
+      d.z += d.sp * dt * 0.35;
+      d.x += Math.sin(time * 0.4 + d.ph) * dt * 0.08;
+      if (d.z > 10) { d.z = 0.2; d.x = hash((time * 10) | 0, d.ph * 10) * (world ? world.w : 7); d.y = hash((time * 7) | 0, d.ph * 3) * (world ? world.h : 7); }
+    }
+    if (state !== "play" || !world || !player) return;
+
+    if (player.moving) {
+      player.t = Math.min(1, player.t + dt / 0.16);
+      const u = player.t * player.t * (3 - 2 * player.t);
+      player.x = lerp(player.px, player.tx, u);
+      player.y = lerp(player.py, player.ty, u);
+      const th = tileAt(world, player.tx, player.ty);
+      const fh = tileAt(world, player.px, player.py);
+      player.h = lerp(fh ? fh.h : 1, th ? th.h : 1, u);
+      if (player.t >= 1) {
+        player.x = player.tx; player.y = player.ty; player.h = th ? th.h : 1;
+        player.moving = false;
+        const q = input.queue; input.queue = null;
+        const d = q || heldDir();
+        if (d) tryMove(d.dx, d.dy);
+        checkTileEvents();
+      }
+    } else {
+      const d = heldDir();
+      if (d) tryMove(d.dx, d.dy);
+    }
+
+    for (const e of world.enemies) enemyStep(e, dt);
+
+    if (invuln <= 0) {
+      for (const e of world.enemies) {
+        if (sameTile(player.x, player.y, e.x, e.y)) { hitPlayer(); break; }
+      }
+    }
+  }
+
+  function checkTileEvents() {
+    const px = Math.round(player.x), py = Math.round(player.y);
+    for (const f of world.food) {
+      if (!f.got && f.x === px && f.y === py) {
+        f.got = true;
+        score += 10;
+        spawnBurst(px + 0.5, py + 0.5, player.h + 1, FOOD_C, 8, "oO*+");
+        sfx("collect");
+        hud();
+        if (remainingFood() === 0) {
+          banner = { text: "ANEMONE OPEN", life: 1.8 };
+        }
+      }
+    }
+    const t = tileAt(world, px, py);
+    if (t && t.type === "anemone" && remainingFood() === 0) {
+      const bonus = 50 + Math.max(0, 40 - Math.floor((time - startTime) * 1.2)) + level * 10;
+      score += bonus;
+      spawnBurst(px + 0.5, py + 0.5, player.h + 2, TEAL_TIP, 16, "oO*~");
+      sfx("win");
+      hud();
+      level += 1;
+      banner = { text: "REEF " + (level - 1) + " CLEAR", life: 1.2 };
+      setTimeout(() => startGame(false), 900);
+    }
+  }
+
+  function hitPlayer() {
+    lives -= 1;
+    invuln = 1.35;
+    flash = 0.28;
+    sfx("hit");
+    spawnBurst(player.x + 0.5, player.y + 0.5, player.h + 1, DANGER, 10, "x*+.");
+    hud();
+    if (lives <= 0) {
+      state = "dead";
+      sfx("go");
+      setTimeout(() => {
+        showOverlay(
+          "the current took you.<br><br>score <strong>" + score + "</strong>   ·   reef <strong>" + level + "</strong>",
+          "SWIM AGAIN",
+          "over"
+        );
+      }, 400);
+    }
+  }
+
+  // ---- buffer ----
+  function clearGrid() {
+    const n = cols * rows;
+    if (grid.length !== n) grid = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const cell = grid[i];
+      if (cell) { cell.ch = " "; cell.fg = null; cell.z = -1e9; }
+      else grid[i] = { ch: " ", fg: null, z: -1e9 };
+    }
+  }
+  function put(c, r, ch, fg, z) {
+    const cc = (c + 0.5) | 0, rr = (r + 0.5) | 0;
+    if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) return;
+    const i = rr * cols + cc;
+    const cell = grid[i];
+    if (z < cell.z) return;
+    cell.ch = ch;
+    cell.fg = fg;
+    cell.z = z;
+  }
+
+  function cam() {
+    const W = world;
+    const oc = W && W._originC != null ? W._originC : 0;
+    const or_ = W && W._originR != null ? W._originR : 0;
+    return { c: oc - cols / 2, r: or_ - rows / 2 };
+  }
+  function toBuf(ic, ir, camo) {
+    return { c: ic - camo.c, r: ir - camo.r };
+  }
+
+  function diamondDist(dc, dr) {
+    const hx = TW / 2, hy = TH / 2;
+    return Math.abs(dc) / hx + Math.abs(dr - hy) / hy;
+  }
+  function inTop(dc, dr) { return diamondDist(dc, dr) <= 1.02; }
+  function isRim(dc, dr) {
+    if (!inTop(dc, dr)) return false;
+    return !inTop(dc - 1, dr) || !inTop(dc + 1, dr) || !inTop(dc, dr - 1) || !inTop(dc, dr + 1);
+  }
+
+  function tileColors(t) {
+    if (t.type === "water") return { top: WATER, hi: WATER_HI, lo: WATER_DP, fill: "~" };
+    if (t.type === "coral") return { top: CORAL, hi: CORAL_HI, lo: CORAL_DK, fill: "@" };
+    if (t.type === "rock") return { top: ROCK, hi: ROCK_HI, lo: ROCK_DK, fill: "#" };
+    if (t.type === "anemone") return { top: STEM, hi: [150, 108, 82], lo: [50, 32, 24], fill: "s" };
+    return { top: SAND, hi: [186, 176, 142], lo: SAND_DP, fill: "s" };
+  }
+
+  function fogOf(x, y) {
+    return clamp((x + y) / Math.max(1, (world.w + world.h)) * 0.22, 0, 0.3);
+  }
+
+  function drawDiamondTop(ox, oy, t, x, y, camo, depth) {
+    const pal = tileColors(t);
+    const wave = time * 2.2 + x * 1.7 + y * 2.3;
+    const fog = fogOf(x, y);
+    const isWater = t.type === "water";
+    for (let dr = 0; dr <= TH; dr++) {
+      for (let dc = -TW / 2 - 1; dc <= TW / 2 + 1; dc++) {
+        if (!inTop(dc, dr)) continue;
+        let light = 0.9 + 0.14 * (1 - dr / TH);
+        if (isWater) light *= 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(wave + dc * 0.8));
+        else light *= 0.94 + 0.08 * Math.sin(time * 1.6 + x * 2 + y * 1.4);
+        let ch, colr;
+        const cliff = t.h > 0 && (function () {
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          for (let i = 0; i < dirs.length; i++) {
+            const n = tileAt(world, x + dirs[i][0], y + dirs[i][1]);
+            if (!n || n.h < t.h) return true;
+          }
+          return false;
+        })();
+        const rim = isRim(dc, dr) && cliff && !isWater;
+        if (isWater) {
+          const chars = "~-~.wv-~";
+          ch = chars[(((x * 3 + y * 5 + dc + dr + ((time * 2.4) | 0)) % chars.length) + chars.length) % chars.length];
+          colr = css(Math.sin(wave + dc) > 0.72 ? pal.hi : pal.top, light, fog);
+        } else if (t.type === "coral") {
+          const chars = "@%&Oo*";
+          ch = chars[(((x * 5 + y * 7 + dc * 3 + dr) >>> 0) % chars.length)];
+          colr = css(dr < 2 ? pal.hi : pal.top, light, fog);
+        } else if (t.type === "rock") {
+          const chars = "H8B#=";
+          ch = chars[(((x * 4 + y * 9 + dc + dr * 2) >>> 0) % chars.length)];
+          colr = css(dr < 2 ? pal.hi : pal.top, light, fog);
+        } else {
+          const chars = ".:s:.-s:";
+          ch = chars[(((x * 8 + y * 3 + dc * 2 + dr) >>> 0) % chars.length)];
+          colr = css(dr < 1 ? pal.hi : pal.top, light, fog);
+        }
+        if (rim) {
+          ch = dc < 0 && dr <= TH / 2 ? "/" : dc > 0 && dr <= TH / 2 ? "\\" : dc < 0 ? "\\" : dc > 0 ? "/" : "_";
+          colr = css(pal.hi, 1.08, fog * 0.35);
+        }
+
+        const p = toBuf(ox + dc, oy + dr, camo);
+        put(p.c, p.r, ch, colr, depth + 0.5 - dr * 0.01);
+      }
+    }
+  }
+
+  function pointInTri(px, py, a, b, c) {
+    const v0x = c[0] - a[0], v0y = c[1] - a[1];
+    const v1x = b[0] - a[0], v1y = b[1] - a[1];
+    const v2x = px - a[0], v2y = py - a[1];
+    const dot00 = v0x * v0x + v0y * v0y;
+    const dot01 = v0x * v1x + v0y * v1y;
+    const dot02 = v0x * v2x + v0y * v2y;
+    const dot11 = v1x * v1x + v1y * v1y;
+    const dot12 = v1x * v2x + v1y * v2y;
+    const inv = 1 / Math.max(1e-9, (dot00 * dot11 - dot01 * dot01));
+    const u = (dot11 * dot02 - dot01 * dot12) * inv;
+    const v = (dot00 * dot12 - dot01 * dot02) * inv;
+    return u >= -0.02 && v >= -0.02 && u + v <= 1.02;
+  }
+  function inPara(px, py, A, B, C, D) {
+    return pointInTri(px, py, A, B, C) || pointInTri(px, py, A, C, D);
+  }
+
+  function drawFaces(ox, oy, t, x, y, camo, depth) {
+    if (t.h <= 0) return;
+    const drop = t.h * ZH;
+    const pal = tileColors(t);
+    const fog = fogOf(x, y);
+    // Left face (brighter), right face (shadow)
+    const faces = [
+      { side: "R", A: [TW / 2, TH / 2], B: [0, TH], C: [0, TH + drop], D: [TW / 2, TH / 2 + drop], light: 0.4 },
+      { side: "L", A: [-TW / 2, TH / 2], B: [0, TH], C: [0, TH + drop], D: [-TW / 2, TH / 2 + drop], light: 0.68 }
+    ];
+    for (const f of faces) {
+      const fillCol = css(pal.lo, f.light, fog);
+      const edgeCol = css(pal.top, f.light + 0.18, fog * 0.5);
+      const chars = f.side === "L" ? "#####H" : "======= ";
+      const minc = Math.floor(Math.min(f.A[0], f.B[0], f.C[0], f.D[0])) - 1;
+      const maxc = Math.ceil(Math.max(f.A[0], f.B[0], f.C[0], f.D[0])) + 1;
+      const minr = Math.floor(Math.min(f.A[1], f.B[1], f.C[1], f.D[1])) - 1;
+      const maxr = Math.ceil(Math.max(f.A[1], f.B[1], f.C[1], f.D[1])) + 1;
+      for (let r = minr; r <= maxr; r++) {
+        for (let c = minc; c <= maxc; c++) {
+          if (!inPara(c, r, f.A, f.B, f.C, f.D)) continue;
+          const rim = !inPara(c - 1, r, f.A, f.B, f.C, f.D) || !inPara(c + 1, r, f.A, f.B, f.C, f.D)
+            || !inPara(c, r - 1, f.A, f.B, f.C, f.D) || !inPara(c, r + 1, f.A, f.B, f.C, f.D);
+          let ch;
+          if (rim && f.side === "L" && c <= f.A[0] + 0.2) ch = "\\";
+          else if (rim && f.side === "R" && c >= f.A[0] - 0.2) ch = "/";
+          else if (rim && r >= (TH + drop) - 0.6) ch = "_";
+          else ch = chars[(((x * 5 + y * 3 + c * 3 + r * 7) >>> 0) % chars.length)];
+          const p = toBuf(ox + c, oy + r, camo);
+          put(p.c, p.r, ch, rim ? edgeCol : fillCol, depth + 0.2 + r * 0.001);
+        }
+      }
+    }
+  }
+
+  function drawAnemone(ox, oy, x, y, camo, depth, ready) {
+    const n = 7;
+    const baseR = oy + 1;
+    const baseC = ox;
+    for (let i = 0; i < n; i++) {
+      const len = 5 + (i % 3);
+      for (let k = 0; k < len; k++) {
+        const sway = Math.sin(time * 1.7 + i * 0.85 + y) * (k / len) * 2.1;
+        const sc = baseC + (i - (n - 1) / 2) * 0.85 + sway;
+        const sr = baseR - k;
+        const chars = "qc*oo@~";
+        const ch = chars[(i * 3 + k) % chars.length];
+        const tip = k / (len - 1 || 1);
+        const colr = ready
+          ? css(lerp3(TEAL_DEEP, ORANGE_HI, tip), 0.9 + 0.15 * Math.sin(time * 4 + i), 0)
+          : css(lerp3(TEAL_DEEP, tip > 0.7 ? TEAL_TIP : TEAL, tip), 0.85 + 0.15 * tip, 0);
+        const p = toBuf(sc, sr, camo);
+        put(p.c, p.r, ch, colr, depth + 0.8 + k * 0.02);
+      }
+    }
+    const p = toBuf(baseC, oy + 2, camo);
+    put(p.c, p.r, "H", css(STEM, 0.9, 0), depth + 0.7);
+  }
+
+  function drawWeed(ox, oy, x, y, camo, depth) {
+    const stalks = 2;
+    for (let i = 0; i < stalks; i++) {
+      const len = 3 + ((x + y + i) % 3);
+      for (let k = 0; k < len; k++) {
+        const sway = Math.sin(time * 1.4 + i * 2 + x) * (k / len) * 1.4;
+        const ch = k === len - 1 ? "*" : (k % 2 ? "/" : "\\");
+        const p = toBuf(ox + i - 0.4 + sway, oy + 1 - k, camo);
+        put(p.c, p.r, ch, css(i ? TEAL : TEAL_DEEP, 0.7 + k * 0.08, 0.1), depth + 0.7 + k * 0.02);
+      }
+    }
+  }
+
+  function drawSprite(cx, cy, camo, depth, cells, halo) {
+    if (halo) {
+      const occ = {};
+      for (const s of cells) occ[s.dx + "," + s.dy] = true;
+      const ring = css([6, 10, 20], 1, 0);
+      for (const s of cells) {
+        const nb = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+        for (const [ax, ay] of nb) {
+          if (occ[(s.dx + ax) + "," + (s.dy + ay)]) continue;
+          const p = toBuf(cx + s.dx + ax, cy + s.dy + ay, camo);
+          put(p.c, p.r, ".", ring, depth + 0.95);
+        }
+      }
+    }
+    for (const s of cells) {
+      const p = toBuf(cx + s.dx, cy + s.dy, camo);
+      put(p.c, p.r, s.ch, s.fg, depth + 1 + (s.z || 0));
+    }
+  }
+
+  function fishCells(dir, moving) {
+    const flap = moving && Math.sin(time * 14) > 0;
+    const o = css(ORANGE, 1, 0);
+    const od = css(ORANGE_DEEP, 1, 0);
+    const oh = css(ORANGE_HI, 1, 0);
+    const w = css(WHITE, 1, 0);
+    const ink = css(INK, 1, 0);
+    const cells = [];
+    const add = (dx, dy, ch, fg) => cells.push({ dx, dy, ch, fg });
+    if (dir === "right") {
+      add(-2, -1, ",", o); add(-1, -1, "-", oh); add(0, -1, "-", o); add(1, -1, ".", o);
+      add(-2, 0, "/", o); add(-1, 0, "o", ink); add(0, 0, "#", w); add(1, 0, "#", o); add(2, 0, flap ? "~" : ">", oh);
+      add(-2, 1, "'", od); add(-1, 1, "-", od); add(0, 1, "-", o); add(1, 1, "'", od);
+    } else if (dir === "left") {
+      add(-1, -1, ".", o); add(0, -1, "-", oh); add(1, -1, "-", o); add(2, -1, ",", o);
+      add(-2, 0, flap ? "~" : "<", oh); add(-1, 0, "#", o); add(0, 0, "#", w); add(1, 0, "o", ink); add(2, 0, "\\", o);
+      add(-1, 1, "'", od); add(0, 1, "-", o); add(1, 1, "-", od); add(2, 1, "'", od);
+    } else if (dir === "up") {
+      add(0, -2, flap ? "v" : "^", oh);
+      add(-1, -1, "/", o); add(0, -1, "#", w); add(1, -1, "\\", o);
+      add(-1, 0, "\\", o); add(0, 0, "o", ink); add(1, 0, "/", o);
+      add(0, 1, "v", od);
+    } else {
+      add(0, -1, ",", o); add(-1, 0, "\\", o); add(0, 0, "#", w); add(1, 0, "/", o);
+      add(-1, 1, "/", o); add(0, 1, "o", ink); add(1, 1, "\\", o);
+      add(0, 2, flap ? "^" : "v", oh);
+    }
+    return cells;
+  }
+
+  function sharkCells(dir) {
+    const g = css(SHARK_C, 1, 0);
+    const d = css(SHARK_DK, 1, 0);
+    const w = css(WHITE, 1, 0);
+    const ink = css(INK, 1, 0);
+    const hi = css(ROCK_HI, 1, 0);
+    const cells = [];
+    const add = (dx, dy, ch, fg) => cells.push({ dx, dy, ch, fg });
+    if (dir === 1 || dir === 0) { // right-ish
+      add(-2, -1, ".", g); add(-1, -1, "-", g); add(0, -1, "_", g); add(1, -1, "_", g);
+      add(-3, 0, "/", g); add(-2, 0, "o", ink); add(-1, 0, "#", g); add(0, 0, "#", g); add(1, 0, "#", d); add(2, 0, "=", hi); add(3, 0, "-", hi);
+      add(-2, 1, "'", d); add(-1, 1, "-", d); add(0, 1, "-", d); add(1, 1, "'", d);
+    } else {
+      add(-1, -1, "_", g); add(0, -1, "_", g); add(1, -1, "-", g); add(2, -1, ".", g);
+      add(-3, 0, "-", hi); add(-2, 0, "=", hi); add(-1, 0, "#", d); add(0, 0, "#", g); add(1, 0, "#", g); add(2, 0, "o", ink); add(3, 0, "\\", g);
+      add(-1, 1, "'", d); add(0, 1, "-", d); add(1, 1, "-", d); add(2, 1, "'", d);
+    }
+    return cells;
+  }
+
+  function jellyCells() {
+    const p = css(JELLY_C, 1, 0);
+    const hi = css(JELLY_HI, 1, 0);
+    const dp = css(PURPLE, 0.85, 0);
+    const pulse = 0.85 + 0.15 * Math.sin(time * 3.2);
+    const cells = [];
+    const add = (dx, dy, ch, fg) => cells.push({ dx, dy, ch, fg });
+    add(-1, -2, ".", css(JELLY_HI, pulse, 0)); add(0, -2, "-", hi); add(1, -2, ".", hi);
+    add(-2, -1, "/", p); add(-1, -1, "@", hi); add(0, -1, "@", p); add(1, -1, "@", hi); add(2, -1, "\\", p);
+    add(-2, 0, "\\", dp); add(-1, 0, "_", p); add(0, 0, "_", p); add(1, 0, "_", p); add(2, 0, "/", dp);
+    const sway = Math.sin(time * 2.5);
+    const tch = ["|", "/", "|", "\\"];
+    for (let i = -1; i <= 1; i++) {
+      const s = Math.round(sway * (i === 0 ? 0 : i));
+      add(i + s * 0, 1, tch[(i + 2 + (sway > 0 ? 1 : 0)) % 4], dp);
+      add(i + Math.round(sway * 0.6), 2, i === 0 ? ":" : ".", dp);
+    }
+    return cells;
+  }
+
+  function drawFood(ox, oy, f, camo, depth) {
+    const bob = Math.sin(time * 3.2 + f.phase) * 0.7;
+    const glow = 0.9 + 0.2 * Math.sin(time * 5 + f.phase);
+    const ring = css([6, 10, 20], 1, 0);
+    const p = toBuf(ox, oy - 1.2 + bob, camo);
+    const ch = (Math.sin(time * 4 + f.phase) > 0) ? "*" : "O";
+    for (const [ax, ay] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const q = toBuf(ox + ax, oy - 1.2 + bob + ay, camo);
+      put(q.c, q.r, ".", ring, depth + 1.15);
+    }
+    put(p.c, p.r, ch, css(FOOD_C, glow, 0), depth + 1.3);
+    const p2 = toBuf(ox, oy - 0.2 + bob, camo);
+    put(p2.c, p2.r, ".", css(WHITE, glow * 0.8, 0), depth + 1.2);
+  }
+
+  function drawBg(camo) {
+    // faint deep-sea dust and bubbles
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const h = hash(c + ((time * 0.15) | 0), r);
+        if (h > 0.965) {
+          const ch = h > 0.99 ? "o" : (h > 0.978 ? "." : "'");
+          const k = 0.35 + (h - 0.965) * 8;
+          put(c, r, ch, css(RIM, k * 0.45, 0.3), -100 + h);
+        }
+      }
+    }
+    if (world) {
+      for (const d of drift) {
+        const p0 = iso(d.x, d.y, d.z);
+        const p = toBuf(p0.c, p0.r, camo);
+        const fade = clamp(1 - Math.abs(d.z - 5) / 6, 0.15, 0.9);
+        put(p.c, p.r, d.ch, css(RIM, 0.35 * fade, 0.2), -20 + d.z);
+      }
+    }
+  }
+
+  function neighborH(W, x, y, dx, dy) {
+    const t = tileAt(W, x + dx, y + dy);
+    if (!t) return 0;
+    return t.h;
+  }
+
+  function drawWorld(camo) {
+    const W = world;
+    if (!W) return;
+    const items = [];
+    const pad = 3;
+    for (let y = -pad; y < W.h + pad; y++) {
+      for (let x = -pad; x < W.w + pad; x++) {
+        let t = tileAt(W, x, y);
+        if (!t) t = { type: "water", h: 0, solid: false, sea: true };
+        items.push({ kind: "tile", x, y, t, depth: x + y });
+      }
+    }
+    for (const f of W.food) if (!f.got) items.push({ kind: "food", x: f.x, y: f.y, f, depth: f.x + f.y + 0.2 });
+    for (const w of W.weeds) items.push({ kind: "weed", x: w.x, y: w.y, depth: w.x + w.y + 0.15 });
+    for (const e of W.enemies) items.push({ kind: "enemy", e, x: e.x, y: e.y, depth: e.x + e.y + 0.35 });
+    if (player) items.push({ kind: "player", depth: player.x + player.y + 0.4 });
+    items.sort((a, b) => a.depth - b.depth);
+    for (const it of items) {
+      if (it.kind === "tile") {
+        const t = it.t, x = it.x, y = it.y;
+        const p = iso(x, y, t.h);
+        const depth = it.depth;
+        if (t.h > 0) drawFaces(p.c, p.r, t, x, y, camo, depth);
+        drawDiamondTop(p.c, p.r, t, x, y, camo, depth);
+        if (t.type === "anemone") drawAnemone(p.c, p.r, x, y, camo, depth, remainingFood() === 0);
+      } else if (it.kind === "food") {
+        const tt = tileAt(W, it.x, it.y);
+        const p = iso(it.x, it.y, tt ? tt.h : 1);
+        drawFood(p.c, p.r, it.f, camo, it.depth);
+      } else if (it.kind === "weed") {
+        const tt = tileAt(W, it.x, it.y);
+        const p = iso(it.x, it.y, tt ? tt.h : 1);
+        drawWeed(p.c, p.r, it.x, it.y, camo, it.depth);
+      } else if (it.kind === "enemy") {
+        const e = it.e;
+        const tt = tileAt(W, Math.round(e.x), Math.round(e.y));
+        const zh = (tt ? tt.h : 1) + (e.kind === "jelly" ? 1.2 + Math.sin(time * 2 + e.bob) * 0.35 : 0.15);
+        const p = iso(e.x, e.y, zh);
+        const cells = e.kind === "jelly" ? jellyCells() : sharkCells(e.dir);
+        drawSprite(p.c, p.r, camo, it.depth, cells);
+      } else if (it.kind === "player") {
+        if (invuln > 0 && ((time * 10) | 0) % 2 === 0) continue;
+        const p = iso(player.x, player.y, player.h + 0.2);
+        drawSprite(p.c, p.r - 1.2, camo, it.depth, fishCells(player.dir, player.moving), true);
+      }
+    }
+  }
+
+  function drawParticles(camo) {
+    for (const p of particles) {
+      const fade = 1 - p.age / p.life;
+      const q = toBuf(p.c, p.r, camo);
+      put(q.c, q.r, p.ch, css(p.color, fade, 0), 80 + fade);
+    }
+  }
+
+  function drawBanner() {
+    if (banner.life <= 0 || !banner.text) return;
+    const text = banner.text;
+    const fade = banner.life < 0.35 ? banner.life / 0.35 : 1;
+    const c0 = ((cols - text.length) / 2) | 0;
+    const r0 = 2;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === " ") continue;
+      put(c0 + i, r0, text[i], css(ORANGE_HI, fade, 0), 200);
+    }
+  }
+
+  function blit() {
+    const w = canvas.width, h = canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    let bg = BG;
+    if (flash > 0) bg = lerp3(BG, [80, 16, 24], flash / 0.28);
+    ctx.fillStyle = css(bg, 1, 0);
+    ctx.fillRect(0, 0, w, h);
+    const stage = document.getElementById("stage");
+    const cssW = stage.clientWidth, cssH = stage.clientHeight;
+    const ox = (cssW - cols * cellW) / 2;
+    const oy = (cssH - rows * cellH) / 2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = cellH * 0.86 + 'px "DejaVu Sans Mono","Cascadia Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono","Courier New",monospace';
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = grid[r * cols + c];
+        if (!cell || cell.ch === " " || !cell.fg) continue;
+        ctx.fillStyle = cell.fg;
+        const x = Math.round((ox + c * cellW) * dpr) / dpr;
+        const y = Math.round((oy + r * cellH) * dpr) / dpr;
+        ctx.fillText(cell.ch, x, y);
+      }
+    }
+  }
+
+  function render() {
+    if (!world) { world = demoWorld(); if (!player) resetPlayer(world); resize(); hud(); }
+    clearGrid();
+    const camo = cam();
+    drawBg(camo);
+    drawWorld(camo);
+    drawParticles(camo);
+    if (state === "play") drawBanner();
+    blit();
+  }
+
+  function frame(ts) {
+    if (!lastTs) lastTs = ts;
+    let dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+    if (dt > 0.05) dt = 0.05;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  // ---- input ----
+  const KEYDIR = {
+    ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+    w: "up", W: "up", s: "down", S: "down", a: "left", A: "left", d: "right", D: "right"
+  };
+  function setDir(name, val) {
+    input[name] = val;
+    document.querySelectorAll("#pad [data-dir]").forEach((b) => {
+      b.classList.toggle("held", !!input[b.getAttribute("data-dir")]);
+    });
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.repeat && KEYDIR[e.key]) { e.preventDefault(); return; }
+    if (KEYDIR[e.key]) {
+      e.preventDefault();
+      setDir(KEYDIR[e.key], true);
+      if (state === "title" || state === "over") startGame(state === "over" || state === "title");
+      return;
+    }
+    if ((e.key === "Enter" || e.key === " ") && (state === "title" || state === "over")) {
+      e.preventDefault();
+      startGame(true);
+    }
+  }, { passive: false });
+  window.addEventListener("keyup", (e) => {
+    if (KEYDIR[e.key]) { e.preventDefault(); setDir(KEYDIR[e.key], false); }
+  }, { passive: false });
+
+  function bindPad() {
+    document.querySelectorAll("#pad [data-dir]").forEach((btn) => {
+      const dir = btn.getAttribute("data-dir");
+      const down = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        setDir(dir, true);
+        if (state === "title" || state === "over") startGame(true);
+        ensureAudio();
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      };
+      const up = (ev) => { ev.preventDefault(); setDir(dir, false); };
+      btn.addEventListener("pointerdown", down);
+      btn.addEventListener("pointerup", up);
+      btn.addEventListener("pointerleave", up);
+      btn.addEventListener("pointercancel", up);
+    });
+  }
+  bindPad();
+
+  // swipe on canvas
+  let swipe = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    if (state === "title" || state === "over") return;
+    ensureAudio();
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!swipe || swipe.id !== e.pointerId) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    swipe = null;
+    if (Math.hypot(dx, dy) < 24) return;
+    if (Math.abs(dy) > Math.abs(dx)) tryMove(dy < 0 ? -1 : 1, dy < 0 ? -1 : 1);
+    else tryMove(dx > 0 ? 1 : -1, dx > 0 ? -1 : 1);
+  });
+  canvas.addEventListener("pointercancel", () => { swipe = null; });
+
+  actionEl.addEventListener("click", () => {
+    ensureAudio();
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    startGame(true);
+  });
+
+  const titleMsg = "a clownfish on a coral reef.\ncollect the golden bites, then swim home to the anemone.\nwatch the jellyfish · fear the shark.\n\nWASD or arrows · D-pad on a phone";
+  showOverlay(titleMsg.replace(/\n/g, "<br>"), "TAP TO SWIM", "title");
+
+  window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", () => setTimeout(resize, 200));
+  resize();
+  seedDrift();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
